@@ -1,141 +1,179 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Player template
-function createPlayer(x, color, controls) {
-  return {
-    x: x,
-    y: 300,
-    width: 40,
-    height: 40,
-    color: color,
-    speed: 3,
-    attacking: false,
-    blocking: false,
-    stunned: 0,
-    alive: true,
-    controls
-  };
+const menu = document.getElementById("menu");
+const gameOverScreen = document.getElementById("gameOver");
+const winnerText = document.getElementById("winnerText");
+const startBtn = document.getElementById("startBtn");
+const restartBtn = document.getElementById("restartBtn");
+
+let gameRunning = false;
+
+class Gladiator {
+  constructor(x, color, controls) {
+    this.x = x;
+    this.y = canvas.height / 2;
+    this.radius = 30;
+    this.color = color;
+    this.hp = 3;
+
+    // Weapons
+    this.spearLength = 60;
+    this.spearThrust = 0; // animation offset
+    this.isAttacking = false;
+
+    this.shieldAngle = 0; // rotation in radians
+    this.isBlocking = false;
+
+    this.controls = controls;
+  }
+
+  draw() {
+    // Body
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Spear (attached to right side for left player, left side for right player)
+    let dir = this.x < canvas.width / 2 ? 1 : -1;
+    let spearBaseX = this.x + dir * this.radius;
+    let spearBaseY = this.y;
+
+    let spearTipX = spearBaseX + dir * (this.spearLength + this.spearThrust);
+    let spearTipY = spearBaseY;
+
+    // Handle
+    ctx.strokeStyle = "saddlebrown";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(spearBaseX, spearBaseY);
+    ctx.lineTo(spearTipX - dir * 15, spearTipY);
+    ctx.stroke();
+
+    // Spearhead
+    ctx.fillStyle = "silver";
+    ctx.beginPath();
+    ctx.moveTo(spearTipX, spearTipY);
+    ctx.lineTo(spearTipX - dir * 15, spearTipY - 10);
+    ctx.lineTo(spearTipX - dir * 15, spearTipY + 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Shield (semi-oval rotating)
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.shieldAngle);
+    ctx.fillStyle = "goldenrod";
+    ctx.beginPath();
+    ctx.ellipse(this.radius, 0, 20, 40, 0, Math.PI * 2, false);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  attack() {
+    if (this.isAttacking) return;
+    this.isAttacking = true;
+    let thrustInterval = setInterval(() => {
+      this.spearThrust += 5;
+      if (this.spearThrust >= 30) {
+        clearInterval(thrustInterval);
+        let retractInterval = setInterval(() => {
+          this.spearThrust -= 5;
+          if (this.spearThrust <= 0) {
+            clearInterval(retractInterval);
+            this.isAttacking = false;
+          }
+        }, 30);
+      }
+    }, 30);
+  }
+
+  block() {
+    if (this.isBlocking) return;
+    this.isBlocking = true;
+    let targetAngle = this.shieldAngle + Math.PI / 2; // rotate 90 degrees
+    let step = (Math.PI / 2) / 10;
+
+    let rotateInterval = setInterval(() => {
+      this.shieldAngle += step;
+      if (this.shieldAngle >= targetAngle) {
+        clearInterval(rotateInterval);
+        this.isBlocking = false;
+      }
+    }, 30);
+  }
 }
 
-// Players
-const player1 = createPlayer(150, "blue", {up:"w",down:"s",left:"a",right:"d",attack:"g",block:"h"});
-const player2 = createPlayer(610, "red", {up:"ArrowUp",down:"ArrowDown",left:"ArrowLeft",right:"ArrowRight",attack:"4",block:"5"});
+let player1, player2;
 
-const players = [player1, player2];
-let keys = {};
-let gameOver = false;
+function startGame() {
+  player1 = new Gladiator(200, "#f1c27d", { attack: "f", block: "g" });
+  player2 = new Gladiator(600, "#ffdbac", { attack: "ArrowLeft", block: "ArrowRight" });
 
-// Input
-window.addEventListener("keydown", e => { keys[e.key] = true; });
-window.addEventListener("keyup", e => { keys[e.key] = false; });
+  menu.style.display = "none";
+  gameOverScreen.style.display = "none";
+  canvas.style.display = "block";
 
-function updatePlayer(p) {
-  if (!p.alive || p.stunned > 0) {
-    if (p.stunned > 0) p.stunned--;
-    return;
-  }
+  gameRunning = true;
+  gameLoop();
+}
 
-  if (keys[p.controls.left]) p.x -= p.speed;
-  if (keys[p.controls.right]) p.x += p.speed;
-  if (keys[p.controls.up]) p.y -= p.speed;
-  if (keys[p.controls.down]) p.y += p.speed;
-
-  // Arena bounds
-  p.x = Math.max(0, Math.min(canvas.width - p.width, p.x));
-  p.y = Math.max(0, Math.min(canvas.height - p.height, p.y));
-
-  // Attack
-  if (keys[p.controls.attack] && !p.attacking) {
-    p.attacking = true;
-    setTimeout(()=>{ p.attacking = false; }, 300);
-  }
-
-  // Block
-  p.blocking = keys[p.controls.block];
+function endGame(winner) {
+  gameRunning = false;
+  canvas.style.display = "none";
+  gameOverScreen.style.display = "block";
+  winnerText.textContent = `${winner} Wins!`;
 }
 
 function checkCollisions() {
-  for (let i = 0; i < players.length; i++) {
-    let p = players[i];
-    let o = players[1-i]; // opponent
-    if (p.attacking && !gameOver) {
-      let spear = {
-        x: p.x + (p === player1 ? p.width : -20),
-        y: p.y + 10,
-        width: 20,
-        height: 10
-      };
-      let shield = {
-        x: o.x + (o === player1 ? -20 : o.width),
-        y: o.y,
-        width: 20,
-        height: o.height
-      };
-      let hitOpponent = rectsOverlap(spear, o);
-      let hitShield = o.blocking && rectsOverlap(spear, shield);
+  // Spear tip vs opponent body
+  [ [player1, player2], [player2, player1] ].forEach(([attacker, defender]) => {
+    let dir = attacker.x < canvas.width / 2 ? 1 : -1;
+    let spearTipX = attacker.x + dir * (attacker.radius + attacker.spearLength + attacker.spearThrust);
+    let spearTipY = attacker.y;
 
-      if (hitShield) {
-        p.stunned = 60; // ~1 sec stun
-      } else if (hitOpponent && o.alive) {
-        o.alive = false;
-        endGame(p === player1 ? "Blue Gladiator Wins!" : "Red Gladiator Wins!");
+    let dx = spearTipX - defender.x;
+    let dy = spearTipY - defender.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+
+    if (dist < defender.radius && attacker.isAttacking) {
+      defender.hp -= 1;
+      attacker.isAttacking = false;
+      attacker.spearThrust = 0;
+      if (defender.hp <= 0) {
+        endGame(attacker === player1 ? "Player 1" : "Player 2");
       }
     }
-  }
-}
-
-function rectsOverlap(r1, r2) {
-  return !(r1.x > r2.x + r2.width ||
-           r1.x + r1.width < r2.x ||
-           r1.y > r2.y + r2.height ||
-           r1.y + r1.height < r2.y);
-}
-
-function drawPlayer(p) {
-  if (!p.alive) {
-    ctx.fillStyle = "gray";
-    ctx.fillRect(p.x, p.y + p.height/2, p.width, 10); // lying body
-    return;
-  }
-  // body
-  ctx.fillStyle = p.color;
-  ctx.beginPath();
-  ctx.arc(p.x + p.width/2, p.y + p.height/2, p.width/2, 0, Math.PI*2);
-  ctx.fill();
-  // shield
-  ctx.fillStyle = "gold";
-  ctx.fillRect(p.x + (p===player1?-20:p.width), p.y, 20, p.height);
-  // spear
-  ctx.fillStyle = "silver";
-  if (p.attacking) {
-    ctx.fillRect(p.x + (p===player1?p.width:-30), p.y+10, 30, 10);
-  } else {
-    ctx.fillRect(p.x + (p===player1?p.width:-10), p.y+15, 20, 5);
-  }
-}
-
-function endGame(message) {
-  gameOver = true;
-  document.getElementById("overlay").style.visibility = "visible";
-  document.getElementById("message").innerText = message;
-}
-
-function restartGame() {
-  player1.x = 150; player1.y = 300; player1.alive = true; player1.stunned = 0;
-  player2.x = 610; player2.y = 300; player2.alive = true; player2.stunned = 0;
-  gameOver = false;
-  document.getElementById("overlay").style.visibility = "hidden";
+  });
 }
 
 function gameLoop() {
+  if (!gameRunning) return;
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (!gameOver) {
-    players.forEach(updatePlayer);
-    checkCollisions();
-  }
-  players.forEach(drawPlayer);
+
+  // Arena floor
+  ctx.fillStyle = "#444";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw players
+  player1.draw();
+  player2.draw();
+
+  // Check collisions
+  checkCollisions();
+
   requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
+window.addEventListener("keydown", (e) => {
+  if (!gameRunning) return;
+  if (e.key === player1.controls.attack) player1.attack();
+  if (e.key === player1.controls.block) player1.block();
+  if (e.key === player2.controls.attack) player2.attack();
+  if (e.key === player2.controls.block) player2.block();
+});
+
+startBtn.addEventListener("click", startGame);
+restartBtn.addEventListener("click", startGame);
