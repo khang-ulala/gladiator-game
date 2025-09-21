@@ -1,10 +1,17 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Gladiator Game</title>
+  <title>CHAAAAAARGE!!!</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>⚔️ Gladiator Arena ⚔️</h1>
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+  <div id="overlay">
+    <div id="message"></div>
+    <button onclick="restartGame()">Replay</button>
+  </div>
+
+  <script src="game.js"></script>
 </body>
 </html>
