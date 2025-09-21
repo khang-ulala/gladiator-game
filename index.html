@@ -1,22 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
   <title>Gladiator Duel</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="menu">
     <h1>⚔️ Gladiator Duel</h1>
+    <p>Left: WASD + G (stab) / H (parry) — Right: Arrows + 4 (stab) / 5 (parry)</p>
     <button id="startBtn">Start Game</button>
   </div>
 
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <canvas id="gameCanvas" width="900" height="500" tabindex="0"></canvas>
 
-  <div id="gameOver" style="display: none;">
-    <h2 id="winnerText"></h2>
-    <button id="restartBtn">Play Again</button>
+  <div id="overlay" class="hidden">
+    <div id="overlayText"></div>
+    <button id="restartBtn">Play again</button>
   </div>
 
   <script src="game.js"></script>
