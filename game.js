@@ -1,243 +1,156 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-const menu = document.getElementById("menu");
-const gameOverScreen = document.getElementById("gameOver");
-const winnerText = document.getElementById("winnerText");
-const startBtn = document.getElementById("startBtn");
-const restartBtn = document.getElementById("restartBtn");
+canvas.width = 800;
+canvas.height = 400;
 
-let gameRunning = false;
-let keys = {};
-
-class Gladiator {
-  constructor(x, color, controls) {
-    this.x = x;
-    this.y = canvas.height / 2;
-    this.radius = 30;
-    this.color = color;
-    this.hp = 1;
-
-    // Weapons
-    this.spearLength = 60;
-    this.spearThrust = 0;
-    this.isAttacking = false;
-
-    this.shieldAngle = 0;
-    this.isBlocking = false;
-
-    this.controls = controls;
-
-    this.stunned = false;
-    this.stunTimer = 0;
-    this.knockback = 0;
-    this.speed = 4;
-  }
-
-  draw() {
-    // Body
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Spear
-    let dir = this.x < canvas.width / 2 ? 1 : -1;
-    let spearBaseX = this.x + dir * this.radius;
-    let spearBaseY = this.y;
-    let spearTipX = spearBaseX + dir * (this.spearLength + this.spearThrust);
-    let spearTipY = spearBaseY;
-
-    ctx.strokeStyle = "saddlebrown";
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.moveTo(spearBaseX, spearBaseY);
-    ctx.lineTo(spearTipX - dir * 15, spearTipY);
-    ctx.stroke();
-
-    ctx.fillStyle = "silver";
-    ctx.beginPath();
-    ctx.moveTo(spearTipX, spearTipY);
-    ctx.lineTo(spearTipX - dir * 15, spearTipY - 10);
-    ctx.lineTo(spearTipX - dir * 15, spearTipY + 10);
-    ctx.closePath();
-    ctx.fill();
-
-    // Shield
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.shieldAngle);
-    ctx.fillStyle = "goldenrod";
-    ctx.beginPath();
-    ctx.ellipse(this.radius, 0, 20, 40, 0, Math.PI * 2, false);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  attack() {
-    if (this.isAttacking || this.stunned) return;
-    this.isAttacking = true;
-    let thrustInterval = setInterval(() => {
-      this.spearThrust += 5;
-      if (this.spearThrust >= 30) {
-        clearInterval(thrustInterval);
-        let retractInterval = setInterval(() => {
-          this.spearThrust -= 5;
-          if (this.spearThrust <= 0) {
-            clearInterval(retractInterval);
-            this.isAttacking = false;
-          }
-        }, 30);
-      }
-    }, 30);
-  }
-
-  block() {
-    if (this.isBlocking) return;
-    this.isBlocking = true;
-    let targetAngle = this.shieldAngle + Math.PI / 2;
-    let step = (Math.PI / 2) / 10;
-
-    let rotateInterval = setInterval(() => {
-      this.shieldAngle += step;
-      if (this.shieldAngle >= targetAngle) {
-        clearInterval(rotateInterval);
-        this.isBlocking = false;
-      }
-    }, 30);
-  }
-
-  stun() {
-    this.stunned = true;
-    this.stunTimer = 60; // ~1 second
-    this.knockback = (this.x < canvas.width / 2 ? -5 : 5);
-  }
-
-  update() {
-    if (this.stunned) {
-      this.x += this.knockback;
-      this.stunTimer--;
-      if (this.stunTimer <= 0) {
+class Player {
+    constructor(x, color, controls) {
+        this.x = x;
+        this.y = canvas.height / 2;
+        this.radius = 20;
+        this.color = color;
+        this.controls = controls;
+        this.speed = 4;
+        this.isAttacking = false;
+        this.isParrying = false;
         this.stunned = false;
-        this.knockback = 0;
-      }
-      return;
+        this.stunTimer = 0;
     }
 
-    // Movement
-    if (keys[this.controls.up]) this.y -= this.speed;
-    if (keys[this.controls.down]) this.y += this.speed;
-    if (keys[this.controls.left]) this.x -= this.speed;
-    if (keys[this.controls.right]) this.x += this.speed;
+    draw() {
+        // body
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
 
-    // Keep inside arena
-    this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
-    this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
-  }
+        // spear
+        ctx.strokeStyle = "brown";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        let spearOffset = this.isAttacking ? 40 : 30;
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.x + (this.controls.facing * spearOffset), this.y);
+        ctx.stroke();
+
+        ctx.strokeStyle = "silver";
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(this.x + (this.controls.facing * spearOffset), this.y);
+        ctx.lineTo(this.x + (this.controls.facing * (spearOffset + 20)), this.y);
+        ctx.stroke();
+
+        // shield
+        ctx.save();
+        ctx.translate(this.x - this.controls.facing * 25, this.y);
+        if (this.isParrying) ctx.rotate(this.controls.facing * Math.PI / 2);
+        ctx.fillStyle = "gray";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    move(keys) {
+        if (this.stunned) return;
+        if (keys[this.controls.up]) this.y -= this.speed;
+        if (keys[this.controls.down]) this.y += this.speed;
+        if (keys[this.controls.left]) this.x -= this.speed;
+        if (keys[this.controls.right]) this.x += this.speed;
+    }
+
+    update() {
+        if (this.stunned) {
+            this.stunTimer--;
+            if (this.stunTimer <= 0) this.stunned = false;
+        }
+    }
 }
 
-let player1, player2;
-
-function startGame() {
-  player1 = new Gladiator(200, "#f1c27d", {
+// Controls mapping
+const player1Controls = {
     up: "w",
     down: "s",
     left: "a",
     right: "d",
-    attack: "g",
-    block: "h"
-  });
+    stab: "g",
+    parry: "h",
+    facing: 1
+};
 
-  player2 = new Gladiator(600, "#ffdbac", {
+const player2Controls = {
     up: "ArrowUp",
     down: "ArrowDown",
     left: "ArrowLeft",
     right: "ArrowRight",
-    attack: "4",
-    block: "5"
-  });
+    stab: "4",
+    parry: "5",
+    facing: -1
+};
 
-  menu.style.display = "none";
-  gameOverScreen.style.display = "none";
-  canvas.style.display = "block";
+const player1 = new Player(150, "peachpuff", player1Controls);
+const player2 = new Player(650, "lightblue", player2Controls);
 
-  gameRunning = true;
-  gameLoop();
-}
+let keys = {};
 
-function endGame(winner) {
-  gameRunning = false;
-  canvas.style.display = "none";
-  gameOverScreen.style.display = "block";
-  winnerText.textContent = `${winner} Wins!`;
-}
+document.addEventListener("keydown", (e) => {
+    keys[e.key] = true;
 
-function checkCollisions() {
-  [[player1, player2], [player2, player1]].forEach(([attacker, defender]) => {
-    let dir = attacker.x < canvas.width / 2 ? 1 : -1;
-    let spearTipX = attacker.x + dir * (attacker.radius + attacker.spearLength + attacker.spearThrust);
-    let spearTipY = attacker.y;
+    if (e.key === player1.controls.stab) player1.isAttacking = true;
+    if (e.key === player1.controls.parry) player1.isParrying = true;
 
-    // Shield collision
-    let shieldX = defender.x + Math.cos(defender.shieldAngle) * defender.radius;
-    let shieldY = defender.y + Math.sin(defender.shieldAngle) * defender.radius;
-    let dxShield = spearTipX - shieldX;
-    let dyShield = spearTipY - shieldY;
-    let distShield = Math.sqrt(dxShield*dxShield + dyShield*dyShield);
+    if (e.key === player2.controls.stab) player2.isAttacking = true;
+    if (e.key === player2.controls.parry) player2.isParrying = true;
+});
 
-    if (distShield < 40 && attacker.isAttacking) {
-      attacker.stun();
-      attacker.isAttacking = false;
-      attacker.spearThrust = 0;
-      return;
+document.addEventListener("keyup", (e) => {
+    keys[e.key] = false;
+
+    if (e.key === player1.controls.stab) player1.isAttacking = false;
+    if (e.key === player1.controls.parry) player1.isParrying = false;
+
+    if (e.key === player2.controls.stab) player2.isAttacking = false;
+    if (e.key === player2.controls.parry) player2.isParrying = false;
+});
+
+function detectHits() {
+    // stabbing range
+    let distance = Math.abs(player1.x - player2.x);
+    let closeEnough = distance < 60 && Math.abs(player1.y - player2.y) < 40;
+
+    if (closeEnough) {
+        if (player1.isAttacking && player2.isParrying) {
+            player1.stunned = true;
+            player1.stunTimer = 30;
+        } else if (player2.isAttacking && player1.isParrying) {
+            player2.stunned = true;
+            player2.stunTimer = 30;
+        } else if (player1.isAttacking) {
+            alert("Player 1 wins!");
+            document.location.reload();
+        } else if (player2.isAttacking) {
+            alert("Player 2 wins!");
+            document.location.reload();
+        }
     }
-
-    // Body collision
-    let dx = spearTipX - defender.x;
-    let dy = spearTipY - defender.y;
-    let dist = Math.sqrt(dx*dx + dy*dy);
-
-    if (dist < defender.radius && attacker.isAttacking && !defender.stunned) {
-      defender.hp -= 1;
-      attacker.isAttacking = false;
-      attacker.spearThrust = 0;
-      if (defender.hp <= 0) {
-        endGame(attacker === player1 ? "Player 1" : "Player 2");
-      }
-    }
-  });
 }
 
 function gameLoop() {
-  if (!gameRunning) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#444";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+    player1.move(keys);
+    player2.move(keys);
 
-  player1.update();
-  player2.update();
+    player1.update();
+    player2.update();
 
-  player1.draw();
-  player2.draw();
+    player1.draw();
+    player2.draw();
 
-  checkCollisions();
+    detectHits();
 
-  requestAnimationFrame(gameLoop);
+    requestAnimationFrame(gameLoop);
 }
 
-window.addEventListener("keydown", (e) => {
-  keys[e.key] = true;
-  if (!gameRunning) return;
-  if (e.key === player1.controls.attack) player1.attack();
-  if (e.key === player1.controls.block) player1.block();
-  if (e.key === player2.controls.attack) player2.attack();
-  if (e.key === player2.controls.block) player2.block();
-});
-
-window.addEventListener("keyup", (e) => {
-  keys[e.key] = false;
-});
-
-startBtn.addEventListener("click", startGame);
-restartBtn.addEventListener("click", startGame);
+gameLoop();
