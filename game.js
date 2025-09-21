@@ -15,17 +15,21 @@ class Gladiator {
     this.y = canvas.height / 2;
     this.radius = 30;
     this.color = color;
-    this.hp = 3;
+    this.hp = 1;
 
     // Weapons
     this.spearLength = 60;
-    this.spearThrust = 0; // animation offset
+    this.spearThrust = 0;
     this.isAttacking = false;
 
-    this.shieldAngle = 0; // rotation in radians
+    this.shieldAngle = 0;
     this.isBlocking = false;
 
     this.controls = controls;
+
+    this.stunned = false;
+    this.stunTimer = 0;
+    this.knockback = 0;
   }
 
   draw() {
@@ -35,15 +39,13 @@ class Gladiator {
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Spear (attached to right side for left player, left side for right player)
+    // Spear
     let dir = this.x < canvas.width / 2 ? 1 : -1;
     let spearBaseX = this.x + dir * this.radius;
     let spearBaseY = this.y;
-
     let spearTipX = spearBaseX + dir * (this.spearLength + this.spearThrust);
     let spearTipY = spearBaseY;
 
-    // Handle
     ctx.strokeStyle = "saddlebrown";
     ctx.lineWidth = 6;
     ctx.beginPath();
@@ -51,7 +53,6 @@ class Gladiator {
     ctx.lineTo(spearTipX - dir * 15, spearTipY);
     ctx.stroke();
 
-    // Spearhead
     ctx.fillStyle = "silver";
     ctx.beginPath();
     ctx.moveTo(spearTipX, spearTipY);
@@ -60,7 +61,7 @@ class Gladiator {
     ctx.closePath();
     ctx.fill();
 
-    // Shield (semi-oval rotating)
+    // Shield
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.shieldAngle);
@@ -72,7 +73,7 @@ class Gladiator {
   }
 
   attack() {
-    if (this.isAttacking) return;
+    if (this.isAttacking || this.stunned) return;
     this.isAttacking = true;
     let thrustInterval = setInterval(() => {
       this.spearThrust += 5;
@@ -92,7 +93,7 @@ class Gladiator {
   block() {
     if (this.isBlocking) return;
     this.isBlocking = true;
-    let targetAngle = this.shieldAngle + Math.PI / 2; // rotate 90 degrees
+    let targetAngle = this.shieldAngle + Math.PI / 2;
     let step = (Math.PI / 2) / 10;
 
     let rotateInterval = setInterval(() => {
@@ -102,6 +103,23 @@ class Gladiator {
         this.isBlocking = false;
       }
     }, 30);
+  }
+
+  stun() {
+    this.stunned = true;
+    this.stunTimer = 60; // ~1 second
+    this.knockback = (this.x < canvas.width / 2 ? -5 : 5);
+  }
+
+  update() {
+    if (this.stunned) {
+      this.x += this.knockback;
+      this.stunTimer--;
+      if (this.stunTimer <= 0) {
+        this.stunned = false;
+        this.knockback = 0;
+      }
+    }
   }
 }
 
@@ -127,17 +145,32 @@ function endGame(winner) {
 }
 
 function checkCollisions() {
-  // Spear tip vs opponent body
-  [ [player1, player2], [player2, player1] ].forEach(([attacker, defender]) => {
+  [[player1, player2], [player2, player1]].forEach(([attacker, defender]) => {
     let dir = attacker.x < canvas.width / 2 ? 1 : -1;
     let spearTipX = attacker.x + dir * (attacker.radius + attacker.spearLength + attacker.spearThrust);
     let spearTipY = attacker.y;
 
+    // --- Shield collision check ---
+    let shieldX = defender.x + Math.cos(defender.shieldAngle) * defender.radius;
+    let shieldY = defender.y + Math.sin(defender.shieldAngle) * defender.radius;
+    let dxShield = spearTipX - shieldX;
+    let dyShield = spearTipY - shieldY;
+    let distShield = Math.sqrt(dxShield*dxShield + dyShield*dyShield);
+
+    if (distShield < 40 && attacker.isAttacking) {
+      // parry success
+      attacker.stun();
+      attacker.isAttacking = false;
+      attacker.spearThrust = 0;
+      return;
+    }
+
+    // --- Body collision check ---
     let dx = spearTipX - defender.x;
     let dy = spearTipY - defender.y;
     let dist = Math.sqrt(dx*dx + dy*dy);
 
-    if (dist < defender.radius && attacker.isAttacking) {
+    if (dist < defender.radius && attacker.isAttacking && !defender.stunned) {
       defender.hp -= 1;
       attacker.isAttacking = false;
       attacker.spearThrust = 0;
@@ -153,15 +186,15 @@ function gameLoop() {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Arena floor
   ctx.fillStyle = "#444";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw players
+  player1.update();
+  player2.update();
+
   player1.draw();
   player2.draw();
 
-  // Check collisions
   checkCollisions();
 
   requestAnimationFrame(gameLoop);
