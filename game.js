@@ -8,6 +8,7 @@ const startBtn = document.getElementById("startBtn");
 const restartBtn = document.getElementById("restartBtn");
 
 let gameRunning = false;
+let keys = {};
 
 class Gladiator {
   constructor(x, color, controls) {
@@ -30,6 +31,7 @@ class Gladiator {
     this.stunned = false;
     this.stunTimer = 0;
     this.knockback = 0;
+    this.speed = 4;
   }
 
   draw() {
@@ -119,15 +121,41 @@ class Gladiator {
         this.stunned = false;
         this.knockback = 0;
       }
+      return;
     }
+
+    // Movement
+    if (keys[this.controls.up]) this.y -= this.speed;
+    if (keys[this.controls.down]) this.y += this.speed;
+    if (keys[this.controls.left]) this.x -= this.speed;
+    if (keys[this.controls.right]) this.x += this.speed;
+
+    // Keep inside arena
+    this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+    this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
   }
 }
 
 let player1, player2;
 
 function startGame() {
-  player1 = new Gladiator(200, "#f1c27d", { attack: "f", block: "g" });
-  player2 = new Gladiator(600, "#ffdbac", { attack: "ArrowLeft", block: "ArrowRight" });
+  player1 = new Gladiator(200, "#f1c27d", {
+    up: "w",
+    down: "s",
+    left: "a",
+    right: "d",
+    attack: "g",
+    block: "h"
+  });
+
+  player2 = new Gladiator(600, "#ffdbac", {
+    up: "ArrowUp",
+    down: "ArrowDown",
+    left: "ArrowLeft",
+    right: "ArrowRight",
+    attack: "4",
+    block: "5"
+  });
 
   menu.style.display = "none";
   gameOverScreen.style.display = "none";
@@ -150,7 +178,7 @@ function checkCollisions() {
     let spearTipX = attacker.x + dir * (attacker.radius + attacker.spearLength + attacker.spearThrust);
     let spearTipY = attacker.y;
 
-    // --- Shield collision check ---
+    // Shield collision
     let shieldX = defender.x + Math.cos(defender.shieldAngle) * defender.radius;
     let shieldY = defender.y + Math.sin(defender.shieldAngle) * defender.radius;
     let dxShield = spearTipX - shieldX;
@@ -158,14 +186,13 @@ function checkCollisions() {
     let distShield = Math.sqrt(dxShield*dxShield + dyShield*dyShield);
 
     if (distShield < 40 && attacker.isAttacking) {
-      // parry success
       attacker.stun();
       attacker.isAttacking = false;
       attacker.spearThrust = 0;
       return;
     }
 
-    // --- Body collision check ---
+    // Body collision
     let dx = spearTipX - defender.x;
     let dy = spearTipY - defender.y;
     let dist = Math.sqrt(dx*dx + dy*dy);
@@ -185,7 +212,6 @@ function gameLoop() {
   if (!gameRunning) return;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
   ctx.fillStyle = "#444";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -201,11 +227,16 @@ function gameLoop() {
 }
 
 window.addEventListener("keydown", (e) => {
+  keys[e.key] = true;
   if (!gameRunning) return;
   if (e.key === player1.controls.attack) player1.attack();
   if (e.key === player1.controls.block) player1.block();
   if (e.key === player2.controls.attack) player2.attack();
   if (e.key === player2.controls.block) player2.block();
+});
+
+window.addEventListener("keyup", (e) => {
+  keys[e.key] = false;
 });
 
 startBtn.addEventListener("click", startGame);
